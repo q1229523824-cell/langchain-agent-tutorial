@@ -1,0 +1,298 @@
+"""一个具备项目检索、计算与会话记忆能力的最小 LangChain Agent。"""
+
+import ast
+import argparse
+import json
+import operator
+import os
+import sys
+import uuid
+from pathlib import Path
+from typing import Any
+
+from dotenv import load_dotenv
+from langchain.agents import create_agent
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain.tools import tool
+from langchain_deepseek import ChatDeepSeek
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ALLOWED_SUFFIXES = {".py", ".ipynb", ".md", ".txt", ".toml", ".yaml", ".yml"}
+SKIP_DIRECTORIES = {".git", ".idea", ".venv", "__pycache__"}
+
+
+def _safe_project_file(relative_path: str) -> Path:
+    """返回项目内允许读取的普通文件，阻止越界和敏感文件访问。"""
+    candidate = (PROJECT_ROOT / relative_path).resolve()
+    if candidate != PROJECT_ROOT and PROJECT_ROOT not in candidate.parents:
+        raise ValueError("只能读取项目目录内的文件。")
+    if candidate.name.startswith(".") or candidate.suffix not in ALLOWED_SUFFIXES:
+        raise ValueError("该文件不在允许读取的范围内。")
+    if not candidate.is_file():
+        raise FileNotFoundError(f"文件不存在：{relative_path}")
+    return candidate
+
+
+@tool
+def search_project_files(keyword: str) -> str:
+    """搜索项目内 Python、Notebook、Markdown 和配置文本中的关键词，返回至多 12 条匹配。"""
+    keyword = keyword.strip()
+    if not keyword:
+        return "关键词不能为空。"
+
+    matches: list[str] = []
+    for path in PROJECT_ROOT.rglob("*"):
+        if any(part in SKIP_DIRECTORIES or part.startswith(".") for part in path.parts):
+            continue
+        if not path.is_file() or path.suffix not in ALLOWED_SUFFIXES:
+            continue
+        try:
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1
+            ):
+                if keyword.lower() in line.lower():
+                    relative_path = path.relative_to(PROJECT_ROOT).as_posix()
+                    matches.append(f"{relative_path}:{line_number}: {line.strip()[:180]}")
+                    if len(matches) == 12:
+                        return "\n".join(matches)
+        except OSError:
+            continue
+
+    return "\n".join(matches) if matches else f"未找到包含“{keyword}”的内容。"
+
+
+@tool
+def read_project_file(relative_path: str) -> str:
+    """读取项目内一个允许的文本或源码文件。参数必须是相对项目根目录的路径。"""
+    try:
+        path = _safe_project_file(relative_path)
+        content = path.read_text(encoding="utf-8", errors="replace")
+        if len(content) > 12_000:
+            content = content[:12_000] + "\n\n[文件内容已截断]"
+        return content
+    except (OSError, ValueError) as error:
+        return f"读取失败：{error}"
+
+
+_OPERATORS: dict[type[ast.operator], Any] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_UNARY_OPERATORS: dict[type[ast.unaryop], Any] = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
+def _evaluate(node: ast.AST) -> int | float:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _OPERATORS:
+        return _OPERATORS[type(node.op)](_evaluate(node.left), _evaluate(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPERATORS:
+        return _UNARY_OPERATORS[type(node.op)](_evaluate(node.operand))
+    raise ValueError("仅支持数字、括号和基本四则运算。")
+
+
+@tool
+def calculate(expression: str) -> str:
+    """计算由数字、括号与 + - * / // % ** 组成的数学表达式。"""
+    try:
+        tree = ast.parse(expression, mode="eval")
+        return str(_evaluate(tree.body))
+    except (SyntaxError, ValueError, ZeroDivisionError, OverflowError) as error:
+        return f"计算失败：{error}"
+
+
+def build_agent():
+    """构建带短期会话记忆的项目学习助手。"""
+    load_dotenv()
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("未配置 DEEPSEEK_API_KEY，请检查 .env 文件。")
+
+    model = ChatDeepSeek(
+        model="deepseek-v4-flash",
+        api_key=api_key,
+        api_base=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        temperature=0.2,
+    )
+    return create_agent(
+        model=model,
+        tools=[search_project_files, read_project_file, calculate],
+        checkpointer=InMemorySaver(),
+        system_prompt=(
+            "你是该项目的中文学习助手。需要了解项目文件时，优先调用搜索或读取工具，"
+            "不要猜测未读取过的代码。计算时调用 calculate。"
+            "工具只能读取允许范围内的文件；遇到权限限制时，说明原因即可。"
+            "回答简洁，并注明你实际查看过的文件。"
+        ),
+    )
+
+
+def _message_text(message: Any) -> str:
+    """兼容字符串和内容块两种消息格式。"""
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text", "")))
+        return "".join(parts)
+    return str(content)
+
+
+def _shorten(value: Any, limit: int = 500) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    text = text.replace("\r", " ").strip()
+    return text if len(text) <= limit else text[:limit] + "…[已截断]"
+
+
+def stream_agent_turn(agent: Any, thread_id: str, user_input: str) -> str:
+    """执行一轮对话，打印工具调用日志并返回最终回答。"""
+    config = {"configurable": {"thread_id": thread_id}}
+    final_answer = ""
+
+    for chunk in agent.stream(
+        {"messages": [{"role": "user", "content": user_input}]},
+        config=config,
+        stream_mode="updates",
+        version="v2",
+    ):
+        if chunk.get("type") != "updates":
+            continue
+        for _, update in chunk.get("data", {}).items():
+            messages = update.get("messages", []) if isinstance(update, dict) else []
+            if not messages:
+                continue
+            message = messages[-1]
+
+            if isinstance(message, AIMessage) and message.tool_calls:
+                for tool_call in message.tool_calls:
+                    print(
+                        f"\n[工具调用] {tool_call['name']}\n"
+                        f"  参数: {_shorten(tool_call.get('args', {}))}"
+                    )
+            elif isinstance(message, ToolMessage):
+                tool_name = message.name or "unknown_tool"
+                print(f"[工具结果] {tool_name}\n  {_shorten(_message_text(message))}")
+            elif isinstance(message, AIMessage):
+                text = _message_text(message).strip()
+                if text:
+                    final_answer = text
+
+    print(f"\n助手> {final_answer or '[模型没有返回文本回答]'}")
+    return final_answer
+
+
+def print_thread_history(agent: Any, thread_id: str) -> None:
+    """显示指定 thread_id 中用户与助手的对话历史。"""
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = agent.get_state(config)
+    messages = snapshot.values.get("messages", []) if snapshot.values else []
+    visible_messages = [
+        message
+        for message in messages
+        if isinstance(message, HumanMessage)
+        or (isinstance(message, AIMessage) and not message.tool_calls and _message_text(message))
+    ]
+    if not visible_messages:
+        print("当前会话还没有对话记录。")
+        return
+
+    print(f"\n--- 会话 {thread_id} 的历史 ---")
+    for message in visible_messages:
+        role = "你" if isinstance(message, HumanMessage) else "助手"
+        print(f"{role}> {_shorten(_message_text(message), limit=1000)}")
+
+
+def run_cli(agent: Any, initial_thread_id: str = "default") -> None:
+    """运行多轮交互式命令行界面。"""
+    thread_id = initial_thread_id
+    print(
+        "项目学习 Agent 已启动。\n"
+        "命令：/help  /thread <名称>  /new  /history  /quit\n"
+        "说明：记忆仅在本次程序运行期间保存。"
+    )
+
+    while True:
+        try:
+            user_input = input(f"\n[{thread_id}] 你> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n已退出。")
+            return
+
+        if not user_input:
+            continue
+        if user_input in {"/quit", "/exit"}:
+            print("已退出。")
+            return
+        if user_input == "/help":
+            print(
+                "/thread <名称>  切换或创建指定会话\n"
+                "/new            创建随机名称的新会话\n"
+                "/history        查看当前会话历史\n"
+                "/quit           退出程序"
+            )
+            continue
+        if user_input == "/history":
+            print_thread_history(agent, thread_id)
+            continue
+        if user_input == "/new":
+            thread_id = f"thread-{uuid.uuid4().hex[:8]}"
+            print(f"已创建并切换到会话：{thread_id}")
+            continue
+        if user_input.startswith("/thread "):
+            new_thread_id = user_input.removeprefix("/thread ").strip()
+            if not new_thread_id:
+                print("请提供会话名称，例如：/thread interview")
+            else:
+                thread_id = new_thread_id
+                print(f"已切换到会话：{thread_id}")
+            continue
+
+        try:
+            stream_agent_turn(agent, thread_id, user_input)
+        except Exception as error:
+            print(f"\n[运行失败] {type(error).__name__}: {error}")
+
+
+def run_memory_demo(agent: Any) -> None:
+    """用同一 thread_id 演示计算工具调用和多轮记忆，不读取项目文件。"""
+    thread_id = "day2-demo"
+    print(f"演示会话 thread_id={thread_id}")
+    stream_agent_turn(
+        agent,
+        thread_id,
+        "我叫小林。请使用计算工具计算 36 * 7。",
+    )
+    stream_agent_turn(agent, thread_id, "我叫什么？刚才的计算结果是多少？")
+
+
+def main() -> None:
+    # DeepSeek 的回答可能包含 emoji；Windows 终端默认 GBK 时避免输出阶段报错。
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+    parser = argparse.ArgumentParser(description="可交互的 LangChain 项目学习 Agent")
+    parser.add_argument("--thread", default="default", help="初始 thread_id")
+    parser.add_argument("--demo", action="store_true", help="运行两轮记忆演示后退出")
+    args = parser.parse_args()
+
+    agent = build_agent()
+    if args.demo:
+        run_memory_demo(agent)
+    else:
+        run_cli(agent, initial_thread_id=args.thread)
+
+
+if __name__ == "__main__":
+    main()
