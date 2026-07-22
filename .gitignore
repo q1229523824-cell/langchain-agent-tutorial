@@ -23,5 +23,9 @@ venv/
 *.db-shm
 *.db-wal
 
+# Local tutorial scratch files
+chapter01_summary/test.py
+chapter02_model/01-model-init-online.ipynb
+
 # Local Codex repository instructions
 AGENTS.md
