@@ -16,3 +16,6 @@ venv/
 
 # Local development tools
 .tools/
+
+# Local Codex repository instructions
+AGENTS.md
