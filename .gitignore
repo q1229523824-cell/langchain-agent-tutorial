@@ -26,6 +26,7 @@ venv/
 # Local tutorial scratch files
 chapter01_summary/test.py
 chapter02_model/01-model-init-online.ipynb
+interview_note/
 
 # Local Codex repository instructions
 AGENTS.md
