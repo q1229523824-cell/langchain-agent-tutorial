@@ -2,7 +2,8 @@
 
 这是一个面向 Agent 开发实习的学习型作品集项目。它从模型调用开始，逐步实现具备工具调用、项目检索和多轮记忆能力的智能体。
 
-学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)。
+学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)和
+[Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)。
 
 ## 当前功能
 
@@ -10,6 +11,7 @@
 - 使用 LangChain 1.2 的 `create_agent` 构建 Agent；
 - Agent 可调用三个本地工具：安全计算、项目文本搜索、项目文件读取；
 - 使用 LangGraph `InMemorySaver` 按 `thread_id` 保存本次进程内的对话记忆；
+- 使用 SQLite 保存用户与助手消息，重新启动后可恢复同一 `thread_id` 的对话；
 - 提供可交互 CLI，可切换会话、查看历史，并实时显示工具调用参数和结果；
 - 文件工具限制在项目目录内，禁止读取 `.env`、隐藏文件和 IDE/Git 目录。
 
@@ -52,7 +54,9 @@ CLI 支持以下命令：
 ```text
 /thread <名称>  切换或创建指定 thread_id 会话
 /new            创建一个新会话
+/threads        查看已有会话
 /history        查看当前会话历史
+/clear          清空当前会话并切换到空会话
 /help           查看帮助
 /quit           退出
 ```
@@ -63,7 +67,9 @@ CLI 支持以下命令：
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" chapter03_agent\project_learning_agent.py --demo
 ```
 
-`InMemorySaver` 只在当前 Python 进程中保留会话；退出程序后记忆消失。生产环境可换成 PostgreSQL checkpointer。
+`InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。
+本地数据库默认位于 `.agent_data/chat_history.db`，不会提交到 GitHub。生产环境可进一步换成
+PostgreSQL checkpointer 持久化完整图状态。
 
 ## 技术亮点
 

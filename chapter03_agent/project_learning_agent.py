@@ -12,13 +12,19 @@ from typing import Any
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain.tools import tool
 from langchain_deepseek import ChatDeepSeek
 from langgraph.checkpoint.memory import InMemorySaver
 
+try:
+    from chapter03_agent.sqlite_chat_store import SQLiteChatStore
+except ModuleNotFoundError:  # 兼容直接执行当前脚本
+    from sqlite_chat_store import SQLiteChatStore
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DB_PATH = PROJECT_ROOT / ".agent_data" / "chat_history.db"
 ALLOWED_SUFFIXES = {".py", ".ipynb", ".md", ".txt", ".toml", ".yaml", ".yml"}
 SKIP_DIRECTORIES = {".git", ".idea", ".venv", "__pycache__"}
 
@@ -156,13 +162,19 @@ def _shorten(value: Any, limit: int = 500) -> str:
     return text if len(text) <= limit else text[:limit] + "…[已截断]"
 
 
-def stream_agent_turn(agent: Any, thread_id: str, user_input: str) -> str:
+def stream_agent_turn(
+    agent: Any,
+    thread_id: str,
+    user_input: str,
+    prior_messages: list[dict[str, str]] | None = None,
+) -> str:
     """执行一轮对话，打印工具调用日志并返回最终回答。"""
     config = {"configurable": {"thread_id": thread_id}}
     final_answer = ""
+    input_messages = [*(prior_messages or []), {"role": "user", "content": user_input}]
 
     for chunk in agent.stream(
-        {"messages": [{"role": "user", "content": user_input}]},
+        {"messages": input_messages},
         config=config,
         stream_mode="updates",
         version="v2",
@@ -193,34 +205,39 @@ def stream_agent_turn(agent: Any, thread_id: str, user_input: str) -> str:
     return final_answer
 
 
-def print_thread_history(agent: Any, thread_id: str) -> None:
-    """显示指定 thread_id 中用户与助手的对话历史。"""
-    config = {"configurable": {"thread_id": thread_id}}
-    snapshot = agent.get_state(config)
-    messages = snapshot.values.get("messages", []) if snapshot.values else []
-    visible_messages = [
-        message
-        for message in messages
-        if isinstance(message, HumanMessage)
-        or (isinstance(message, AIMessage) and not message.tool_calls and _message_text(message))
-    ]
-    if not visible_messages:
+def print_thread_history(store: SQLiteChatStore, thread_id: str) -> None:
+    """从 SQLite 显示指定 thread_id 的持久化对话历史。"""
+    messages = store.get_messages(thread_id)
+    if not messages:
         print("当前会话还没有对话记录。")
         return
 
     print(f"\n--- 会话 {thread_id} 的历史 ---")
-    for message in visible_messages:
-        role = "你" if isinstance(message, HumanMessage) else "助手"
-        print(f"{role}> {_shorten(_message_text(message), limit=1000)}")
+    for message in messages:
+        role = "你" if message.role == "user" else "助手"
+        print(f"{role}> {_shorten(message.content, limit=1000)}")
 
 
-def run_cli(agent: Any, initial_thread_id: str = "default") -> None:
+def _stored_messages_as_input(store: SQLiteChatStore, thread_id: str) -> list[dict[str, str]]:
+    """把数据库记录转换为 LangChain 接受的消息字典。"""
+    return [
+        {"role": message.role, "content": message.content}
+        for message in store.get_messages(thread_id)
+    ]
+
+
+def run_cli(
+    agent: Any,
+    store: SQLiteChatStore,
+    initial_thread_id: str = "default",
+) -> None:
     """运行多轮交互式命令行界面。"""
     thread_id = initial_thread_id
+    hydrated_threads: set[str] = set()
     print(
         "项目学习 Agent 已启动。\n"
-        "命令：/help  /thread <名称>  /new  /history  /quit\n"
-        "说明：记忆仅在本次程序运行期间保存。"
+        "命令：/help  /thread <名称>  /new  /threads  /history  /clear  /quit\n"
+        f"说明：对话会持久化到本地 SQLite：{store.db_path}"
     )
 
     while True:
@@ -239,12 +256,24 @@ def run_cli(agent: Any, initial_thread_id: str = "default") -> None:
             print(
                 "/thread <名称>  切换或创建指定会话\n"
                 "/new            创建随机名称的新会话\n"
+                "/threads        查看已有会话\n"
                 "/history        查看当前会话历史\n"
+                "/clear          清空当前会话历史\n"
                 "/quit           退出程序"
             )
             continue
         if user_input == "/history":
-            print_thread_history(agent, thread_id)
+            print_thread_history(store, thread_id)
+            continue
+        if user_input == "/threads":
+            threads = store.list_threads()
+            print("已有会话：" + (", ".join(threads) if threads else "暂无"))
+            continue
+        if user_input == "/clear":
+            deleted = store.clear_thread(thread_id)
+            # 更换内部 thread_id，避免 InMemorySaver 继续携带已清除的旧状态。
+            thread_id = f"{thread_id}-cleared-{uuid.uuid4().hex[:6]}"
+            print(f"已清除 {deleted} 条消息，并切换到空会话：{thread_id}")
             continue
         if user_input == "/new":
             thread_id = f"thread-{uuid.uuid4().hex[:8]}"
@@ -260,7 +289,21 @@ def run_cli(agent: Any, initial_thread_id: str = "default") -> None:
             continue
 
         try:
-            stream_agent_turn(agent, thread_id, user_input)
+            prior_messages = None
+            if thread_id not in hydrated_threads:
+                prior_messages = _stored_messages_as_input(store, thread_id)
+                hydrated_threads.add(thread_id)
+                if prior_messages:
+                    print(f"[记忆恢复] 已从 SQLite 加载 {len(prior_messages)} 条历史消息。")
+            final_answer = stream_agent_turn(
+                agent,
+                thread_id,
+                user_input,
+                prior_messages=prior_messages,
+            )
+            if final_answer:
+                store.add_message(thread_id, "user", user_input)
+                store.add_message(thread_id, "assistant", final_answer)
         except Exception as error:
             print(f"\n[运行失败] {type(error).__name__}: {error}")
 
@@ -285,13 +328,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="可交互的 LangChain 项目学习 Agent")
     parser.add_argument("--thread", default="default", help="初始 thread_id")
     parser.add_argument("--demo", action="store_true", help="运行两轮记忆演示后退出")
+    parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH, help="SQLite 对话数据库路径")
     args = parser.parse_args()
 
     agent = build_agent()
     if args.demo:
         run_memory_demo(agent)
     else:
-        run_cli(agent, initial_thread_id=args.thread)
+        run_cli(agent, SQLiteChatStore(args.db), initial_thread_id=args.thread)
 
 
 if __name__ == "__main__":

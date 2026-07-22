@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -13,16 +14,20 @@ from chapter03_agent.project_learning_agent import (  # noqa: E402
     read_project_file,
     search_project_files,
     stream_agent_turn,
+    print_thread_history,
 )
+from chapter03_agent.sqlite_chat_store import SQLiteChatStore  # noqa: E402
 from langchain_core.messages import AIMessage, ToolMessage  # noqa: E402
 
 
 class FakeStreamingAgent:
     def __init__(self):
         self.received_config = None
+        self.received_input_data = None
 
     def stream(self, input_data, config, stream_mode, version):
         self.received_config = config
+        self.received_input_data = input_data
         yield {
             "type": "updates",
             "data": {
@@ -93,6 +98,39 @@ class ProjectLearningAgentToolTests(unittest.TestCase):
         )
         self.assertIn("[工具调用] calculate", output.getvalue())
         self.assertIn("[工具结果] calculate", output.getvalue())
+
+    def test_stream_hydrates_persisted_messages_before_current_input(self):
+        agent = FakeStreamingAgent()
+        prior_messages = [
+            {"role": "user", "content": "我叫小林"},
+            {"role": "assistant", "content": "你好，小林"},
+        ]
+
+        with redirect_stdout(StringIO()):
+            stream_agent_turn(
+                agent,
+                "persistent-test",
+                "我叫什么？",
+                prior_messages=prior_messages,
+            )
+
+        self.assertEqual(
+            agent.received_input_data["messages"],
+            [*prior_messages, {"role": "user", "content": "我叫什么？"}],
+        )
+
+    def test_print_history_reads_persisted_messages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteChatStore(Path(directory) / "chat.db")
+            store.add_message("study", "user", "学习 Agent")
+            store.add_message("study", "assistant", "从工具调用开始")
+            output = StringIO()
+
+            with redirect_stdout(output):
+                print_thread_history(store, "study")
+
+        self.assertIn("你> 学习 Agent", output.getvalue())
+        self.assertIn("助手> 从工具调用开始", output.getvalue())
 
 
 if __name__ == "__main__":
