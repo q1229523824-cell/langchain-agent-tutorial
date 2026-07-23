@@ -3,7 +3,8 @@
 这是一个面向 Agent 开发实习的学习型作品集项目。它从模型调用开始，逐步实现具备工具调用、项目检索和多轮记忆能力的智能体。
 
 学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)和
-[Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)。
+[Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)、
+[Day 4 上下文工程讲义](docs/day04-context-engineering.md)。
 
 ## 当前功能
 
@@ -12,6 +13,7 @@
 - Agent 可调用三个本地工具：安全计算、项目文本搜索、项目文件读取；
 - 使用 LangGraph `InMemorySaver` 按 `thread_id` 保存本次进程内的对话记忆；
 - 使用 SQLite 保存用户与助手消息，重新启动后可恢复同一 `thread_id` 的对话；
+- 使用摘要中间件压缩过长历史，并限制单轮模型和工具调用次数；
 - 提供可交互 CLI，可切换会话、查看历史，并实时显示工具调用参数和结果；
 - 文件工具限制在项目目录内，禁止读取 `.env`、隐藏文件和 IDE/Git 目录。
 
@@ -70,6 +72,16 @@ CLI 支持以下命令：
 `InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。
 本地数据库默认位于 `.agent_data/chat_history.db`，不会提交到 GitHub。生产环境可进一步换成
 PostgreSQL checkpointer 持久化完整图状态。
+
+Day 4 默认在状态消息达到 30 条时摘要旧历史并保留最近 12 条，同时限制单轮最多 8 次模型调用和
+6 次工具调用。可通过以下参数调整：
+
+```text
+--summary-trigger-messages
+--summary-keep-messages
+--model-call-limit
+--tool-call-limit
+```
 
 ## 技术亮点
 

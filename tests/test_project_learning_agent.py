@@ -10,6 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from chapter03_agent.project_learning_agent import (  # noqa: E402
+    AgentRuntimeSettings,
+    build_agent_middleware,
     calculate,
     read_project_file,
     search_project_files,
@@ -17,7 +19,8 @@ from chapter03_agent.project_learning_agent import (  # noqa: E402
     print_thread_history,
 )
 from chapter03_agent.sqlite_chat_store import SQLiteChatStore  # noqa: E402
-from langchain_core.messages import AIMessage, ToolMessage  # noqa: E402
+from langchain_core.messages import AIMessage, RemoveMessage, ToolMessage  # noqa: E402
+from langchain_core.language_models.fake_chat_models import FakeListChatModel  # noqa: E402
 
 
 class FakeStreamingAgent:
@@ -64,7 +67,46 @@ class FakeStreamingAgent:
         }
 
 
+class FakeSummarizingAgent(FakeStreamingAgent):
+    def stream(self, input_data, config, stream_mode, version):
+        yield {
+            "type": "updates",
+            "data": {
+                "SummarizationMiddleware.before_model": {
+                    "messages": [
+                        RemoveMessage(id="__remove_all__"),
+                        AIMessage(content="旧历史摘要"),
+                    ]
+                }
+            },
+        }
+        yield from super().stream(input_data, config, stream_mode, version)
+
+
 class ProjectLearningAgentToolTests(unittest.TestCase):
+    def test_runtime_settings_reject_invalid_limits(self):
+        with self.assertRaises(ValueError):
+            AgentRuntimeSettings(summary_trigger_messages=10, summary_keep_messages=10).validate()
+        with self.assertRaises(ValueError):
+            AgentRuntimeSettings(tool_call_limit=0).validate()
+
+    def test_builds_context_and_budget_middleware(self):
+        settings = AgentRuntimeSettings(
+            summary_trigger_messages=20,
+            summary_keep_messages=8,
+            model_call_limit=5,
+            tool_call_limit=4,
+        )
+        model = FakeListChatModel(responses=["摘要"])
+
+        middleware = build_agent_middleware(model, settings)
+
+        self.assertEqual(middleware[0].trigger, ("messages", 20))
+        self.assertEqual(middleware[0].keep, ("messages", 8))
+        self.assertIn("不可信数据", middleware[0].summary_prompt)
+        self.assertEqual(middleware[1].run_limit, 5)
+        self.assertEqual(middleware[2].run_limit, 4)
+
     def test_calculate_expression(self):
         result = calculate.invoke({"expression": "(18 * 5 + 10) / 4"})
         self.assertEqual(result, "25.0")
@@ -118,6 +160,16 @@ class ProjectLearningAgentToolTests(unittest.TestCase):
             agent.received_input_data["messages"],
             [*prior_messages, {"role": "user", "content": "我叫什么？"}],
         )
+
+    def test_stream_logs_context_summarization(self):
+        agent = FakeSummarizingAgent()
+        output = StringIO()
+
+        with redirect_stdout(output):
+            answer = stream_agent_turn(agent, "summary-test", "继续")
+
+        self.assertEqual(answer, "答案是 42。")
+        self.assertIn("[上下文摘要]", output.getvalue())
 
     def test_print_history_reads_persisted_messages(self):
         with tempfile.TemporaryDirectory() as directory:
