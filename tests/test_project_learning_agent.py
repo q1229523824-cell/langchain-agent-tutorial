@@ -13,7 +13,9 @@ from chapter03_agent.project_learning_agent import (  # noqa: E402
     AgentRuntimeSettings,
     build_agent_middleware,
     calculate,
+    ensure_retrieval_citations,
     read_project_file,
+    retrieve_project_knowledge,
     search_project_files,
     stream_agent_turn,
     print_thread_history,
@@ -126,6 +128,42 @@ class ProjectLearningAgentToolTests(unittest.TestCase):
         blocked = read_project_file.invoke({"relative_path": ".env"})
         self.assertIn("def build_agent", source)
         self.assertIn("读取失败", blocked)
+
+    def test_read_blocks_local_interview_notes(self):
+        blocked = read_project_file.invoke(
+            {"relative_path": "interview_note/day01-day03-agent-interview.md"}
+        )
+        self.assertIn("读取失败", blocked)
+
+    def test_rag_tool_returns_source_citations(self):
+        result = retrieve_project_knowledge.invoke(
+            {"query": "Day 4 上下文摘要和工具调用预算", "top_k": 3}
+        )
+        self.assertIn("[来源 1]", result)
+        self.assertIn(":L", result)
+        self.assertIn("day04-context-engineering.md", result)
+
+    def test_missing_model_citations_are_filled_from_real_tool_sources(self):
+        answer = ensure_retrieval_citations(
+            "Day 4 使用摘要中间件控制上下文。",
+            [
+                "docs/day04-context-engineering.md:L1-L24",
+                "chapter03_agent/project_learning_agent.py:L185-L206",
+            ],
+        )
+
+        self.assertIn("检索来源（系统补全）", answer)
+        self.assertIn("[docs/day04-context-engineering.md:L1-L24]", answer)
+
+    def test_existing_real_citation_is_not_duplicated(self):
+        original = "结论。[docs/day04-context-engineering.md:L1-L24]"
+
+        answer = ensure_retrieval_citations(
+            original,
+            ["docs/day04-context-engineering.md:L1-L24"],
+        )
+
+        self.assertEqual(answer, original)
 
     def test_stream_logs_tools_and_uses_thread_id(self):
         agent = FakeStreamingAgent()

@@ -4,13 +4,15 @@
 
 学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)和
 [Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)、
-[Day 4 上下文工程讲义](docs/day04-context-engineering.md)。
+[Day 4 上下文工程讲义](docs/day04-context-engineering.md)和
+[Day 5 Agentic RAG 讲义](docs/day05-agentic-rag.md)。
 
 ## 当前功能
 
 - 使用 `ChatDeepSeek` 调用 DeepSeek 模型；
 - 使用 LangChain 1.2 的 `create_agent` 构建 Agent；
-- Agent 可调用三个本地工具：安全计算、项目文本搜索、项目文件读取；
+- Agent 可调用安全计算、项目文本搜索、项目文件读取和项目知识检索工具；
+- 使用本地 BM25 完成项目知识切块、Top-K 检索和文件行号引用；
 - 使用 LangGraph `InMemorySaver` 按 `thread_id` 保存本次进程内的对话记忆；
 - 使用 SQLite 保存用户与助手消息，重新启动后可恢复同一 `thread_id` 的对话；
 - 使用摘要中间件压缩过长历史，并限制单轮模型和工具调用次数；
@@ -23,6 +25,7 @@
 chapter01_summary/      # 环境与版本验证
 chapter02_model/        # DeepSeek 模型调用示例
 chapter03_agent/        # 最小项目学习 Agent
+chapter04_rag/          # Day 5 本地知识库、切块和 BM25 检索
 tests/                  # 不调用 API 的本地工具测试
 ```
 
@@ -90,11 +93,14 @@ Day 4 默认在状态消息达到 30 条时摘要旧历史并保留最近 12 条
 1. Agent 只能通过工具获得项目内容；
 2. 文件读取会校验路径，避免 `../` 越界；
 3. 计算器通过 Python AST 解析表达式，不使用 `eval`；
-4. 短期记忆通过 `thread_id` 隔离，便于后续替换为 PostgreSQL 持久化。
+4. 短期记忆通过 `thread_id` 隔离，便于后续替换为 PostgreSQL 持久化；
+5. RAG 只索引允许的项目文本，返回 Top-K 证据和精确到行的来源；
+6. `interview_note`、`.env`、本地数据库及隐藏目录不会进入 RAG 或 Git。
 
 ## 后续计划
 
 - 接入 Tavily 搜索，添加带来源的联网研究；
 - 为 Agent 增加 token 级流式输出和异常重试；
 - 接入 PostgreSQL checkpoint，实现跨进程会话记忆；
-- 添加 RAG 文档问答和 FastAPI 服务接口。
+- 将 BM25 升级为 Embedding + 向量数据库，并加入重排；
+- 添加 FastAPI 服务接口。
