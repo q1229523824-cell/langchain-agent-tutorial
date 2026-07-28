@@ -5,7 +5,8 @@
 学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)和
 [Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)、
 [Day 4 上下文工程讲义](docs/day04-context-engineering.md)和
-[Day 5 Agentic RAG 讲义](docs/day05-agentic-rag.md)。
+[Day 5 Agentic RAG 讲义](docs/day05-agentic-rag.md)、
+[Day 6 安全退款 Agent 讲义](docs/day06-safe-refund-agent.md)。
 
 ## 当前功能
 
@@ -16,6 +17,8 @@
 - 使用 LangGraph `InMemorySaver` 按 `thread_id` 保存本次进程内的对话记忆；
 - 使用 SQLite 保存用户与助手消息，重新启动后可恢复同一 `thread_id` 的对话；
 - 使用摘要中间件压缩过长历史，并限制单轮模型和工具调用次数；
+- 使用独立退款业务服务演示资格校验、二次确认、幂等执行和退款状态机；
+- 高风险模拟退款只能通过确定性 CLI `/confirm` 命令触发，模型没有直接退款权限；
 - 提供可交互 CLI，可切换会话、查看历史，并实时显示工具调用参数和结果；
 - 文件工具限制在项目目录内，禁止读取 `.env`、隐藏文件和 IDE/Git 目录。
 
@@ -26,6 +29,7 @@ chapter01_summary/      # 环境与版本验证
 chapter02_model/        # DeepSeek 模型调用示例
 chapter03_agent/        # 最小项目学习 Agent
 chapter04_rag/          # Day 5 本地知识库、切块和 BM25 检索
+chapter05_refund/       # Day 6 安全退款 Agent 与本地模拟业务服务
 tests/                  # 不调用 API 的本地工具测试
 ```
 
@@ -72,6 +76,18 @@ CLI 支持以下命令：
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" chapter03_agent\project_learning_agent.py --demo
 ```
 
+运行 Day 6 本地退款黑盒演示。它不调用 DeepSeek、不连接真实支付渠道，也不产生真实资金变化：
+
+```powershell
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" chapter05_refund\refund_agent.py --demo
+```
+
+运行 Day 6 可交互 Agent（普通问答会调用 DeepSeek，`/confirm` 只执行本地模拟退款）：
+
+```powershell
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" chapter05_refund\refund_agent.py
+```
+
 `InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。
 本地数据库默认位于 `.agent_data/chat_history.db`，不会提交到 GitHub。生产环境可进一步换成
 PostgreSQL checkpointer 持久化完整图状态。
@@ -95,7 +111,10 @@ Day 4 默认在状态消息达到 30 条时摘要旧历史并保留最近 12 条
 3. 计算器通过 Python AST 解析表达式，不使用 `eval`；
 4. 短期记忆通过 `thread_id` 隔离，便于后续替换为 PostgreSQL 持久化；
 5. RAG 只索引允许的项目文本，返回 Top-K 证据和精确到行的来源；
-6. `interview_note`、`.env`、本地数据库及隐藏目录不会进入 RAG 或 Git。
+6. `interview_note`、`.env`、本地数据库及隐藏目录不会进入 RAG 或 Git；
+7. 模型可查询订单和准备退款，但不能直接执行高风险副作用；
+8. `confirmation_id` 绑定用户、订单、金额和过期时间，幂等键防止重复退款；
+9. SQLite 事务、唯一约束和状态事件保证并发安全与可追踪性。
 
 ## 后续计划
 

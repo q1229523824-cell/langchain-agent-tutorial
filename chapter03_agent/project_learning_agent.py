@@ -207,8 +207,17 @@ def build_agent_middleware(
     ]
 
 
-def build_agent(settings: AgentRuntimeSettings | None = None):
-    """构建带记忆、上下文管理和执行预算的项目学习助手。"""
+def build_agent(
+    settings: AgentRuntimeSettings | None = None,
+    *,
+    extra_tools: list[Any] | None = None,
+    system_prompt_suffix: str = "",
+):
+    """构建带记忆、上下文管理和执行预算的项目学习助手。
+
+    ``extra_tools`` 和 ``system_prompt_suffix`` 让后续 Day 项目复用同一套模型、
+    RAG、记忆和中间件，而不用复制 Agent 基础设施。
+    """
     load_dotenv()
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
@@ -222,27 +231,30 @@ def build_agent(settings: AgentRuntimeSettings | None = None):
         api_base=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         temperature=0.2,
     )
+    agent_tools = [
+        retrieve_project_knowledge,
+        search_project_files,
+        read_project_file,
+        calculate,
+    ]
+    agent_tools.extend(extra_tools or [])
+    base_system_prompt = (
+        "你是该项目的中文学习助手。回答项目架构、设计和学习知识点时，优先调用 "
+        "retrieve_project_knowledge 获取相关上下文和来源；查找精确符号时使用 "
+        "search_project_files，需要完整源码时再使用 read_project_file。"
+        "不要猜测未检索或读取过的项目内容。计算时调用 calculate。"
+        "工具只能读取允许范围内的文件；遇到权限限制时，说明原因即可。"
+        "基于检索结果回答时，在相关结论后引用工具返回的 [路径:L起始-L结束]；"
+        "没有足够来源时明确说明，不要编造引用。"
+        "历史很长时，系统会提供旧对话摘要和最近消息；优先依据最近明确要求。"
+        "回答简洁，并注明你实际查看过的文件。"
+    )
     return create_agent(
         model=model,
-        tools=[
-            retrieve_project_knowledge,
-            search_project_files,
-            read_project_file,
-            calculate,
-        ],
+        tools=agent_tools,
         checkpointer=InMemorySaver(),
         middleware=build_agent_middleware(model, settings),
-        system_prompt=(
-            "你是该项目的中文学习助手。回答项目架构、设计和学习知识点时，优先调用 "
-            "retrieve_project_knowledge 获取相关上下文和来源；查找精确符号时使用 "
-            "search_project_files，需要完整源码时再使用 read_project_file。"
-            "不要猜测未检索或读取过的项目内容。计算时调用 calculate。"
-            "工具只能读取允许范围内的文件；遇到权限限制时，说明原因即可。"
-            "基于检索结果回答时，在相关结论后引用工具返回的 [路径:L起始-L结束]；"
-            "没有足够来源时明确说明，不要编造引用。"
-            "历史很长时，系统会提供旧对话摘要和最近消息；优先依据最近明确要求。"
-            "回答简洁，并注明你实际查看过的文件。"
-        ),
+        system_prompt=base_system_prompt + system_prompt_suffix,
     )
 
 
