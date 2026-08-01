@@ -1,12 +1,13 @@
-# LangChain 1.2 Agent 学习项目
+# 星河商城：LangChain 1.2 电商客服 Agent
 
-这是一个面向 Agent 开发实习的学习型作品集项目。它从模型调用开始，逐步实现具备工具调用、项目检索和多轮记忆能力的智能体。
+这是一个面向 Agent 开发实习的学习型作品集项目。项目从 DeepSeek 模型调用开始，最终实现一个具备商品推荐、政策问答、订单查询、安全退款、持久化记忆、离线评测和 FastAPI 接口的电商客服 Agent。
 
 学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)和
 [Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)、
 [Day 4 上下文工程讲义](docs/day04-context-engineering.md)和
 [Day 5 Agentic RAG 讲义](docs/day05-agentic-rag.md)、
-[Day 6 安全退款 Agent 讲义](docs/day06-safe-refund-agent.md)。
+[Day 6 安全退款 Agent 讲义](docs/day06-safe-refund-agent.md)以及
+[Day 14 电商客服 Agent 完整讲义](docs/day14-ecommerce-agent.md)。
 
 ## 当前功能
 
@@ -21,6 +22,11 @@
 - 高风险模拟退款只能通过确定性 CLI `/confirm` 命令触发，模型没有直接退款权限；
 - 提供可交互 CLI，可切换会话、查看历史，并实时显示工具调用参数和结果；
 - 文件工具限制在项目目录内，禁止读取 `.env`、隐藏文件和 IDE/Git 目录。
+- 使用显式 LangGraph Router 将请求分配给商品、政策、订单、退款和安全节点；
+- 使用 BM25、本地哈希向量、RRF 融合和轻量 Reranker 完成混合检索；
+- 使用 FastAPI 暴露聊天、订单、退款确认、指标和 Trace 接口；
+- 使用原子问答写入、用户/会话双重隔离、滑动窗口限流和结构化运行指标；
+- 提供完全离线的端到端演示与评测集，默认不产生 DeepSeek API 费用。
 
 ## 项目结构
 
@@ -30,6 +36,7 @@ chapter02_model/        # DeepSeek 模型调用示例
 chapter03_agent/        # 最小项目学习 Agent
 chapter04_rag/          # Day 5 本地知识库、切块和 BM25 检索
 chapter05_refund/       # Day 6 安全退款 Agent 与本地模拟业务服务
+chapter06_ecommerce/    # Day 14 电商工作流、混合检索、API、评测和可观测性
 tests/                  # 不调用 API 的本地工具测试
 ```
 
@@ -88,6 +95,33 @@ CLI 支持以下命令：
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" chapter05_refund\refund_agent.py
 ```
 
+运行 Day 14 完全离线的电商端到端演示：
+
+```powershell
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --demo
+```
+
+运行离线路由与检索评测：
+
+```powershell
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --eval
+```
+
+启动 FastAPI（默认使用确定性回答模板，不调用外部模型）：
+
+```powershell
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --api
+```
+
+访问 `http://127.0.0.1:8000/docs` 查看 Swagger。演示接口使用请求头
+`X-Demo-Token: demo-user-token`，生产环境必须替换为真正的 JWT/OAuth/session。
+
+只有明确允许把当前问题、最近六条消息和必要证据发送给 DeepSeek 时才启用：
+
+```powershell
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --api --use-llm
+```
+
 `InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。
 本地数据库默认位于 `.agent_data/chat_history.db`，不会提交到 GitHub。生产环境可进一步换成
 PostgreSQL checkpointer 持久化完整图状态。
@@ -115,11 +149,15 @@ Day 4 默认在状态消息达到 30 条时摘要旧历史并保留最近 12 条
 7. 模型可查询订单和准备退款，但不能直接执行高风险副作用；
 8. `confirmation_id` 绑定用户、订单、金额和过期时间，幂等键防止重复退款；
 9. SQLite 事务、唯一约束和状态事件保证并发安全与可追踪性。
+10. 商品价格和库存只来自业务服务，政策结论必须带可追溯引用；
+11. 高风险退款确认独立于自然语言路由，模型没有直接写权限；
+12. Trace 只保存路由、耗时和引用等元数据，不保存原始问题；
+13. 离线评测覆盖路由准确率、Retrieval Hit Rate@3 和危险请求阻断率。
 
-## 后续计划
+## 生产化边界
 
-- 接入 Tavily 搜索，添加带来源的联网研究；
-- 为 Agent 增加 token 级流式输出和异常重试；
-- 接入 PostgreSQL checkpoint，实现跨进程会话记忆；
-- 将 BM25 升级为 Embedding + 向量数据库，并加入重排；
-- 添加 FastAPI 服务接口。
+- 当前身份系统是本地 demo token，不是真实登录认证；
+- 默认向量编码器是可离线测试的本地哈希向量，不是神经网络 Embedding；
+- SQLite 和 `InMemorySaver` 适合单机作品演示，生产环境应换成 PostgreSQL；
+- 退款渠道是本地模拟器，不连接真实支付和资金系统；
+- 生产环境还需要分布式限流、密钥管理、回调验签、对账、告警和数据脱敏。

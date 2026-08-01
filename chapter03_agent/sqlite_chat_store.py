@@ -80,6 +80,32 @@ class SQLiteChatStore:
             )
             return int(cursor.lastrowid)
 
+    def add_exchange(self, thread_id: str, user_content: str, assistant_content: str) -> tuple[int, int]:
+        """在同一个事务中保存一组用户问题和助手回答。
+
+        Day 3 的 CLI 分两次调用 ``add_message``；如果第二次写入失败，理论上会留下
+        只有用户问题的半组记录。Day 14 的 API 使用本方法保证两条消息同时成功或同时回滚。
+        """
+
+        thread_id = thread_id.strip()
+        user_content = user_content.strip()
+        assistant_content = assistant_content.strip()
+        if not thread_id:
+            raise ValueError("thread_id 不能为空。")
+        if not user_content or not assistant_content:
+            raise ValueError("用户问题和助手回答都不能为空。")
+
+        with self._connect() as connection:
+            user_cursor = connection.execute(
+                "INSERT INTO messages (thread_id, role, content) VALUES (?, 'user', ?)",
+                (thread_id, user_content),
+            )
+            assistant_cursor = connection.execute(
+                "INSERT INTO messages (thread_id, role, content) VALUES (?, 'assistant', ?)",
+                (thread_id, assistant_content),
+            )
+            return int(user_cursor.lastrowid), int(assistant_cursor.lastrowid)
+
     def get_messages(self, thread_id: str) -> list[StoredMessage]:
         """按写入顺序返回指定 thread_id 的全部消息。"""
         with self._connect() as connection:

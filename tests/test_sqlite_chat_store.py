@@ -29,6 +29,24 @@ class SQLiteChatStoreTests(unittest.TestCase):
         self.assertEqual([message.role for message in messages], ["user", "assistant"])
         self.assertEqual([message.content for message in messages], ["我叫小林", "你好，小林"])
 
+    def test_add_exchange_writes_ordered_pair(self):
+        store = SQLiteChatStore(self.db_path)
+        user_id, assistant_id = store.add_exchange("pair", "问题", "回答")
+
+        messages = store.get_messages("pair")
+        self.assertLess(user_id, assistant_id)
+        self.assertEqual([message.role for message in messages], ["user", "assistant"])
+        self.assertEqual([message.content for message in messages], ["问题", "回答"])
+
+    def test_add_exchange_writes_ordered_pair(self):
+        store = SQLiteChatStore(self.db_path)
+        user_id, assistant_id = store.add_exchange("pair", "问题", "回答")
+
+        messages = store.get_messages("pair")
+        self.assertLess(user_id, assistant_id)
+        self.assertEqual([message.role for message in messages], ["user", "assistant"])
+        self.assertEqual([message.content for message in messages], ["问题", "回答"])
+
     def test_threads_are_isolated_and_listed_by_recent_activity(self):
         store = SQLiteChatStore(self.db_path)
         store.add_message("study", "user", "学习问题")

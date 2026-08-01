@@ -226,7 +226,7 @@ class RefundService:
             (
                 "order-1001",
                 "demo-user",
-                "LangChain Agent 实战课程",
+                "降噪蓝牙耳机 Pro",
                 19900,
                 OrderStatus.UNSHIPPED,
                 created_at,
@@ -234,7 +234,7 @@ class RefundService:
             (
                 "order-1002",
                 "demo-user",
-                "Agent 工程手册",
+                "机械键盘 K87",
                 9900,
                 OrderStatus.SHIPPED,
                 created_at,
