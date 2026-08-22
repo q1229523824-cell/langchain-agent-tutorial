@@ -1,0 +1,10 @@
+.env
+.git
+.idea
+.tools
+.agent_data
+**/__pycache__
+**/*.pyc
+**/*.db*
+fly_agent
+main.py

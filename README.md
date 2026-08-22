@@ -1,13 +1,14 @@
-# 星河商城：LangChain 1.2 电商客服 Agent
+# LangChain 1.2 Agent 工程学习项目
 
-这是一个面向 Agent 开发实习的学习型作品集项目。项目从 DeepSeek 模型调用开始，最终实现一个具备商品推荐、政策问答、订单查询、安全退款、持久化记忆、离线评测和 FastAPI 接口的电商客服 Agent。
+这是一个面向 Agent 开发实习的学习型作品集项目。项目从 DeepSeek 模型调用开始，逐步实现项目学习 Agent、电商客服 Agent，以及具备动态工具规划、证据审核和网页界面的 CS2 智能复盘教练。
 
 学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)和
 [Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)、
 [Day 4 上下文工程讲义](docs/day04-context-engineering.md)和
 [Day 5 Agentic RAG 讲义](docs/day05-agentic-rag.md)、
 [Day 6 安全退款 Agent 讲义](docs/day06-safe-refund-agent.md)以及
-[Day 14 电商客服 Agent 完整讲义](docs/day14-ecommerce-agent.md)。
+[Day 14 电商客服 Agent 完整讲义](docs/day14-ecommerce-agent.md)和
+[Day 15 CS2 智能复盘教练讲义](docs/day15-cs2-review-coach.md)。
 
 ## 当前功能
 
@@ -27,6 +28,8 @@
 - 使用 FastAPI 暴露聊天、订单、退款确认、指标和 Trace 接口；
 - 使用原子问答写入、用户/会话双重隔离、滑动窗口限流和结构化运行指标；
 - 提供完全离线的端到端演示与评测集，默认不产生 DeepSeek API 费用。
+- 提供 RoundMind CS2 复盘网页，Agent 可按问题动态选择首轮交火、补枪、道具、经济和残局工具；
+- CS2 结论经过 Reviewer 校验并绑定具体回合，默认完全离线运行。
 
 ## 项目结构
 
@@ -37,6 +40,7 @@ chapter03_agent/        # 最小项目学习 Agent
 chapter04_rag/          # Day 5 本地知识库、切块和 BM25 检索
 chapter05_refund/       # Day 6 安全退款 Agent 与本地模拟业务服务
 chapter06_ecommerce/    # Day 14 电商工作流、混合检索、API、评测和可观测性
+chapter07_cs2_coach/    # Day 15 CS2 复盘 Agent、分析工具、API 和网页
 tests/                  # 不调用 API 的本地工具测试
 ```
 
@@ -121,6 +125,15 @@ CLI 支持以下命令：
 ```powershell
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --api --use-llm
 ```
+
+启动 RoundMind CS2 智能复盘教练（默认完全离线）：
+
+```powershell
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter07_cs2_coach.main
+```
+
+访问 `http://127.0.0.1:8000`。网页内置一场 Mirage 示例比赛，也支持上传符合
+`MatchRecord` 格式的 JSON。原始 `.dem` 接入属于下一阶段，当前版本不会伪装成已经支持。
 
 `InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。
 本地数据库默认位于 `.agent_data/chat_history.db`，不会提交到 GitHub。生产环境可进一步换成
