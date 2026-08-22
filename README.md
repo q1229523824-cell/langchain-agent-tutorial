@@ -28,8 +28,6 @@
 - 使用 FastAPI 暴露聊天、订单、退款确认、指标和 Trace 接口；
 - 使用原子问答写入、用户/会话双重隔离、滑动窗口限流和结构化运行指标；
 - 提供完全离线的端到端演示与评测集，默认不产生 DeepSeek API 费用。
-- 提供 RoundMind CS2 复盘网页，Agent 可按问题动态选择首轮交火、补枪、道具、经济和残局工具；
-- CS2 结论经过 Reviewer 校验并绑定具体回合，默认完全离线运行。
 
 ## 项目结构
 
@@ -40,7 +38,6 @@ chapter03_agent/        # 最小项目学习 Agent
 chapter04_rag/          # Day 5 本地知识库、切块和 BM25 检索
 chapter05_refund/       # Day 6 安全退款 Agent 与本地模拟业务服务
 chapter06_ecommerce/    # Day 14 电商工作流、混合检索、API、评测和可观测性
-chapter07_cs2_coach/    # Day 15 CS2 复盘 Agent、分析工具、API 和网页
 tests/                  # 不调用 API 的本地工具测试
 ```
 
@@ -125,28 +122,6 @@ CLI 支持以下命令：
 ```powershell
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --api --use-llm
 ```
-
-启动 RoundMind CS2 智能复盘教练（默认完全离线）：
-
-```powershell
-& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter07_cs2_coach.main
-```
-
-访问 `http://127.0.0.1:8000`。网页内置一场 Mirage 示例比赛，支持上传符合
-`MatchRecord` 格式的 JSON，也提供异步 CS2 `.dem` 解析 API。Demo 最大 200 MB，上传时
-必须填写 Demo 中的玩家昵称；服务只读取 Agent 所需事件，解析结束后立即删除临时文件。
-
-Demo API 的主要流程：
-
-```text
-POST /api/demo-jobs              # 上传 Demo，返回 job_id
-GET  /api/demo-jobs/{job_id}     # 查询上传/解析/分析进度
-POST /api/analyze                # 对已解析比赛提出新的复盘问题
-```
-
-Docker/Render 部署配置位于 `chapter07_cs2_coach/Dockerfile` 和根目录 `render.yaml`。
-公开前端通过运行时变量 `ROUNDMIND_API_URL` 连接后端；后端通过
-`ROUNDMIND_CORS_ORIGINS` 限制允许调用 API 的网页来源。
 
 `InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。
 本地数据库默认位于 `.agent_data/chat_history.db`，不会提交到 GitHub。生产环境可进一步换成
