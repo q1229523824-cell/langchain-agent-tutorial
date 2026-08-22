@@ -91,3 +91,16 @@ class AnalysisResponse(BaseModel):
     tools_used: list[str]
     execution_trace: list[str]
     confidence: Literal["high", "medium", "low"]
+
+
+class DemoJobResponse(BaseModel):
+    """异步 Demo 解析任务的公开状态。"""
+
+    job_id: str
+    status: Literal["queued", "parsing", "completed", "failed"]
+    progress: int = Field(ge=0, le=100)
+    filename: str
+    player_name: str
+    match: MatchRecord | None = None
+    analysis: AnalysisResponse | None = None
+    error: str | None = None

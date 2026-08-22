@@ -132,8 +132,21 @@ CLI 支持以下命令：
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter07_cs2_coach.main
 ```
 
-访问 `http://127.0.0.1:8000`。网页内置一场 Mirage 示例比赛，也支持上传符合
-`MatchRecord` 格式的 JSON。原始 `.dem` 接入属于下一阶段，当前版本不会伪装成已经支持。
+访问 `http://127.0.0.1:8000`。网页内置一场 Mirage 示例比赛，支持上传符合
+`MatchRecord` 格式的 JSON，也提供异步 CS2 `.dem` 解析 API。Demo 最大 200 MB，上传时
+必须填写 Demo 中的玩家昵称；服务只读取 Agent 所需事件，解析结束后立即删除临时文件。
+
+Demo API 的主要流程：
+
+```text
+POST /api/demo-jobs              # 上传 Demo，返回 job_id
+GET  /api/demo-jobs/{job_id}     # 查询上传/解析/分析进度
+POST /api/analyze                # 对已解析比赛提出新的复盘问题
+```
+
+Docker/Render 部署配置位于 `chapter07_cs2_coach/Dockerfile` 和根目录 `render.yaml`。
+公开前端通过运行时变量 `ROUNDMIND_API_URL` 连接后端；后端通过
+`ROUNDMIND_CORS_ORIGINS` 限制允许调用 API 的网页来源。
 
 `InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。
 本地数据库默认位于 `.agent_data/chat_history.db`，不会提交到 GitHub。生产环境可进一步换成
