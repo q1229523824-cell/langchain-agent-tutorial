@@ -198,7 +198,7 @@ Unsafe Request Block Rate  1.0000
 ## 运行方式
 
 ```powershell
-# 80项全量测试
+# 85项全量测试
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m unittest discover -s tests -v
 
 # 完全离线演示
@@ -224,8 +224,9 @@ Unsafe Request Block Rate  1.0000
 ### 简历技术栈
 
 ```text
-Python、LangChain 1.2、LangGraph、DeepSeek、FastAPI、Pydantic、SQLite、
-BM25、Local Hash Vector、RRF、Reranker、RAG、RESTful API、unittest
+Python、LangChain 1.2、LangGraph、DeepSeek、FastAPI、SQLite、BM25、
+Local Hash Vector、RRF、Reranker、RAG、PyJWT、SSE、Java 17、Spring Boot、
+MyBatis-Plus、MySQL、Redis、React、Vite、TypeScript、Docker Compose、unittest
 ```
 
 ### 简历要点
@@ -234,13 +235,13 @@ BM25、Local Hash Vector、RRF、Reranker、RAG、RESTful API、unittest
 - 实现 BM25＋本地哈希向量双路召回、RRF 排名融合和轻量重排，返回精确到文件行号的政策证据，并建立 Retrieval Hit Rate@3 离线评测；
 - 使用 SQLite 持久化聊天和业务状态，以 `user_id + thread_id` 隔离会话，并通过事务、唯一约束、确认编号和幂等键防止越权及重复退款；
 - 使用 FastAPI/Pydantic 提供聊天、订单、退款确认、状态和指标接口，增加请求校验、演示身份映射、滑动窗口限流和不记录原始消息的 Trace；
-- 编写80项自动化测试覆盖 RAG、记忆、正式API、提示词注入阻断、并发退款和端到端流程；固定9例离线评测集当前全部通过。
+- 编写85项自动化测试覆盖 RAG、记忆、正式 API、JWT、Java REST 工具、提示词注入阻断、并发退款和端到端流程；固定离线评测集当前全部通过。
 
 ## 面试介绍
 
 ### 30秒版本
 
-> 我实现了一个基于 LangChain、LangGraph 和 DeepSeek 的电商客服 Agent，支持商品推荐、政策问答、订单查询和安全退款。政策问答采用 BM25 与本地哈希向量双路召回，再做 RRF 融合和重排；订单价格、库存和退款状态全部来自确定性业务服务。高风险退款不能由模型直接执行，而是通过服务端身份、二次确认、事务和幂等键保证安全。项目提供分层FastAPI后端、SQLite记忆、SSE传输、Trace、离线评测和80项测试。
+> 我实现了一个基于 LangChain、LangGraph 和 DeepSeek 的电商客服 Agent，支持商品推荐、政策问答、订单查询和安全退款。Python 负责 Agent 编排，Java Spring Boot 负责确定性业务；退款采用二次确认、事务边界、订单版本和幂等键保护。项目提供分层 FastAPI 后端、JWT、SQLite 记忆、SSE、React 前端、Trace、离线评测和 85 项测试。
 
 ### 技术取舍
 

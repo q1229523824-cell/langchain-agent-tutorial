@@ -9,6 +9,7 @@
 [Day 6 安全退款 Agent 讲义](docs/day06-safe-refund-agent.md)以及
 [Day 14 电商客服 Agent 完整讲义](docs/day14-ecommerce-agent.md)和
 [Day 15 CS2 智能复盘教练讲义](docs/day15-cs2-review-coach.md)。
+需要写简历时可直接参考[简历项目描述](docs/resume-project-description.md)。
 
 ## 当前功能
 
