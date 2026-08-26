@@ -1,6 +1,6 @@
 # LangChain 1.2 Agent 工程学习项目
 
-这是一个面向 Agent 开发实习的学习型作品集项目。项目从 DeepSeek 模型调用开始，逐步实现项目学习 Agent、电商客服 Agent，以及具备动态工具规划、证据审核和网页界面的 CS2 智能复盘教练。
+这是一个面向 Agent 开发实习的学习型作品集项目。项目从 DeepSeek 模型调用开始，逐步实现项目学习 Agent、电商客服 Agent，以及具备动态工具规划、证据审核和网页界面的 CS2 智能复盘教练。当前电商主线进一步拆分为 Python Agent 编排层和 Java 业务服务层，形成可演示的前后端分离架构。
 
 学习本项目时，请配合阅读 [Day 1–2 学习讲义](docs/day01-day02-study-guide.md)和
 [Day 3 持久化记忆讲义](docs/day03-persistent-memory.md)、
@@ -26,8 +26,14 @@
 - 使用显式 LangGraph Router 将请求分配给商品、政策、订单、退款和安全节点；
 - 使用 BM25、本地哈希向量、RRF 融合和轻量 Reranker 完成混合检索；
 - 使用 FastAPI 暴露聊天、订单、退款确认、指标和 Trace 接口；
+- 新增正式 `app/` 应用层，将API、Schema、服务、Agent、检索和Repository职责分离；
+- 正式接口统一使用 `/api/v1`，提供请求ID、统一错误、CORS和SSE分块响应；
+- 提供会话列表/历史、商品列表/详情、订单详情、退款列表/状态/审计接口；
 - 使用原子问答写入、用户/会话双重隔离、滑动窗口限流和结构化运行指标；
 - 提供完全离线的端到端演示与评测集，默认不产生 DeepSeek API 费用。
+- 新增 `business-service/` Spring Boot 业务服务示例：商品、订单、退款预览/确认、幂等键、乐观锁和 Trace ID；
+- 新增 `database/schema.sql`、`database/seed.sql` 与 `docker-compose.yml`，演示 MySQL、Redis 和 Java 服务的部署边界；
+- Python Agent 只负责编排，Java 业务服务负责鉴权、状态机、事务和确定性写入，避免模型直接操作订单数据。
 
 ## 项目结构
 
@@ -38,6 +44,9 @@ chapter03_agent/        # 最小项目学习 Agent
 chapter04_rag/          # Day 5 本地知识库、切块和 BM25 检索
 chapter05_refund/       # Day 6 安全退款 Agent 与本地模拟业务服务
 chapter06_ecommerce/    # Day 14 电商工作流、混合检索、API、评测和可观测性
+app/                    # 正式后端：API、Schema、服务、Agent与数据访问适配层
+business-service/       # Java Spring Boot商品/订单/退款业务服务（当前为可替换仓库的demo）
+database/               # MySQL建表与演示数据脚本
 tests/                  # 不调用 API 的本地工具测试
 ```
 
@@ -108,19 +117,45 @@ CLI 支持以下命令：
 & "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --eval
 ```
 
-启动 FastAPI（默认使用确定性回答模板，不调用外部模型）：
+启动正式 FastAPI（默认使用确定性回答模板，不调用外部模型）：
 
 ```powershell
-& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --api
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 访问 `http://127.0.0.1:8000/docs` 查看 Swagger。演示接口使用请求头
 `X-Demo-Token: demo-user-token`，生产环境必须替换为真正的 JWT/OAuth/session。
+正式接口位于 `/api/v1`；旧 `/v1` 只作为Day14学习版本的隐藏兼容层。
+
+主要后端接口：
+
+```text
+POST /api/v1/chat
+POST /api/v1/chat/stream
+GET  /api/v1/conversations
+GET  /api/v1/conversations/{thread_id}/messages
+GET  /api/v1/products
+GET  /api/v1/products/{sku}
+GET  /api/v1/orders
+GET  /api/v1/orders/{order_id}
+GET  /api/v1/refunds
+POST /api/v1/refunds/prepare
+POST /api/v1/refunds/{confirmation_id}/confirm
+GET  /api/v1/refunds/{refund_id}
+GET  /api/v1/refunds/{refund_id}/events
+```
+
+详细分层、Data Lineage和错误格式见
+[正式后端架构说明](docs/formal-backend-architecture.md)。
+
+Python Agent + Java 业务服务的跨语言边界、退款两阶段协议和 MySQL/Redis 运行方式见
+[Python + Java 电商架构说明](docs/python-java-ecommerce-architecture.md)。
 
 只有明确允许把当前问题、最近六条消息和必要证据发送给 DeepSeek 时才启用：
 
 ```powershell
-& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m chapter06_ecommerce.ecommerce_agent --api --use-llm
+$env:ECOMMERCE_USE_LLM = "true"
+& "C:\Users\19194\.conda\envs\langchain1.2\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 `InMemorySaver` 保存当前 Python 进程的完整图状态；SQLite 保存可跨进程恢复的用户与助手文本。

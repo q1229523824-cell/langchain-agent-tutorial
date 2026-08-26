@@ -510,6 +510,27 @@ class RefundService:
             }
         return self._refund_payload(row)
 
+    def list_refunds(self, user_id: str) -> dict[str, object]:
+        """按最近更新时间返回当前用户自己的退款记录。"""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, order_id, amount_cents, status, provider_reference,
+                       error_code, retryable, message, created_at, updated_at
+                FROM refunds
+                WHERE user_id = ?
+                ORDER BY updated_at DESC, id DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return {
+            "ok": True,
+            "status": "succeeded",
+            "count": len(rows),
+            "refunds": [self._refund_payload(row) for row in rows],
+        }
+
     def list_refund_events(self, user_id: str, refund_id: str) -> list[dict[str, object]]:
         """返回状态转换审计事件；只允许退款所属用户读取。"""
         with self._connect() as connection:

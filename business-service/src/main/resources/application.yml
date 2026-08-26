@@ -1,0 +1,17 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: xinghe-business-service
+  # 默认 demo 模式不要求本机安装 MySQL/Redis；业务层使用内存仓库。
+  # 启用 mysql profile 后再接入下面的基础设施配置。
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

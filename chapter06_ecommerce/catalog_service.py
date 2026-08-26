@@ -89,6 +89,31 @@ class CatalogService:
             return {"ok": False, "status": "not_found", "message": "商品不存在。"}
         return {"ok": True, "status": "succeeded", "product": product.as_payload()}
 
+    def list_products(
+        self,
+        *,
+        category: str | None = None,
+        in_stock_only: bool = False,
+    ) -> dict[str, object]:
+        """返回可供API展示的商品目录，可按分类和库存过滤。"""
+
+        normalized_category = category.strip().lower() if category else None
+        products = [
+            product.as_payload()
+            for product in self.products
+            if (not in_stock_only or product.stock > 0)
+            and (
+                normalized_category is None
+                or normalized_category in product.category.lower()
+            )
+        ]
+        return {
+            "ok": True,
+            "status": "succeeded",
+            "count": len(products),
+            "products": products,
+        }
+
     def recommend(
         self,
         query: str,

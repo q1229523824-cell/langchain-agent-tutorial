@@ -1,0 +1,36 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: xinghe
+      MYSQL_USER: xinghe
+      MYSQL_PASSWORD: change-me
+      MYSQL_ROOT_PASSWORD: root-change-me
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  business-service:
+    build: ./business-service
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/xinghe?useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: xinghe
+      SPRING_DATASOURCE_PASSWORD: change-me
+      SPRING_DATA_REDIS_HOST: redis
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mysql
+      - redis
+
+volumes:
+  mysql-data:

@@ -455,7 +455,14 @@ class EcommerceAgentRuntime:
         # 服务端组合用户和会话，避免两个用户使用相同 thread_id 时共享聊天历史。
         return f"{user_id}:{thread_id}"
 
-    def chat(self, *, user_id: str, thread_id: str, message: str) -> dict[str, object]:
+    def chat(
+        self,
+        *,
+        user_id: str,
+        thread_id: str,
+        message: str,
+        request_id: str | None = None,
+    ) -> dict[str, object]:
         user_id = user_id.strip()
         thread_id = thread_id.strip()
         message = message.strip()
@@ -463,7 +470,7 @@ class EcommerceAgentRuntime:
             raise ValueError("user_id、thread_id 和 message 都不能为空。")
         self.rate_limiter.check(user_id)
 
-        request_id = f"req_{uuid.uuid4().hex}"
+        request_id = request_id or f"req_{uuid.uuid4().hex}"
         storage_thread = self._storage_thread_id(user_id, thread_id)
         history = [
             {"role": item.role, "content": item.content}
@@ -523,9 +530,15 @@ class EcommerceAgentRuntime:
             )
             raise
 
-    def confirm_refund(self, *, user_id: str, confirmation_id: str) -> dict[str, object]:
+    def confirm_refund(
+        self,
+        *,
+        user_id: str,
+        confirmation_id: str,
+        request_id: str | None = None,
+    ) -> dict[str, object]:
         self.rate_limiter.check(user_id)
-        request_id = f"req_{uuid.uuid4().hex}"
+        request_id = request_id or f"req_{uuid.uuid4().hex}"
         started = time.perf_counter()
         try:
             result = self.refund_service.confirm_and_execute(user_id, confirmation_id)
@@ -563,9 +576,84 @@ class EcommerceAgentRuntime:
         self.rate_limiter.check(user_id)
         return self.refund_service.list_orders(user_id)
 
+    def get_order(self, *, user_id: str, order_id: str) -> dict[str, object]:
+        self.rate_limiter.check(user_id)
+        return self.refund_service.get_order(user_id, order_id)
+
+    def list_products(
+        self,
+        *,
+        category: str | None = None,
+        in_stock_only: bool = False,
+    ) -> dict[str, object]:
+        return self.workflow.catalog.list_products(
+            category=category,
+            in_stock_only=in_stock_only,
+        )
+
+    def get_product(self, *, sku: str) -> dict[str, object]:
+        return self.workflow.catalog.get_product(sku)
+
+    def prepare_refund(self, *, user_id: str, order_id: str) -> dict[str, object]:
+        self.rate_limiter.check(user_id)
+        return self.refund_service.prepare_refund(user_id, order_id)
+
+    def list_refunds(self, *, user_id: str) -> dict[str, object]:
+        self.rate_limiter.check(user_id)
+        return self.refund_service.list_refunds(user_id)
+
     def refund_status(self, *, user_id: str, refund_id: str) -> dict[str, object]:
         self.rate_limiter.check(user_id)
         return self.refund_service.get_refund_status(user_id, refund_id)
+
+    def refund_events(self, *, user_id: str, refund_id: str) -> dict[str, object]:
+        self.rate_limiter.check(user_id)
+        events = self.refund_service.list_refund_events(user_id, refund_id)
+        return {"refund_id": refund_id, "count": len(events), "events": events}
+
+    def list_conversations(self, *, user_id: str) -> dict[str, object]:
+        prefix = f"{user_id}:"
+        conversations: list[dict[str, object]] = []
+        for storage_thread in self.chat_store.list_threads():
+            if not storage_thread.startswith(prefix):
+                continue
+            messages = self.chat_store.get_messages(storage_thread)
+            if not messages:
+                continue
+            conversations.append(
+                {
+                    "thread_id": storage_thread.removeprefix(prefix),
+                    "message_count": len(messages),
+                    "last_message": messages[-1].content,
+                    "updated_at": messages[-1].created_at,
+                }
+            )
+        return {"count": len(conversations), "conversations": conversations}
+
+    def conversation_history(
+        self,
+        *,
+        user_id: str,
+        thread_id: str,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        if not 1 <= limit <= 200:
+            raise ValueError("limit 必须位于 1 到 200 之间。")
+        storage_thread = self._storage_thread_id(user_id, thread_id)
+        messages = self.chat_store.get_messages(storage_thread)[-limit:]
+        return {
+            "thread_id": thread_id,
+            "count": len(messages),
+            "messages": [
+                {
+                    "id": message.id,
+                    "role": message.role,
+                    "content": message.content,
+                    "created_at": message.created_at,
+                }
+                for message in messages
+            ],
+        }
 
 
 __all__ = [

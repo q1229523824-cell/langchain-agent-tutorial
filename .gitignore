@@ -23,6 +23,10 @@ venv/
 *.db-shm
 *.db-wal
 
+# Java / frontend build artifacts
+business-service/target/
+node_modules/
+
 # Local tutorial scratch files
 chapter01_summary/test.py
 chapter02_model/01-model-init-online.ipynb

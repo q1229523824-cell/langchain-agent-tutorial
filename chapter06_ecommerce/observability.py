@@ -66,6 +66,15 @@ class TraceStore:
         with self._lock:
             return [asdict(record) for record in list(self._records)[-limit:]]
 
+    def recent_for_user(self, user_id: str, limit: int = 20) -> list[dict[str, object]]:
+        """只返回指定用户自己的Trace，避免普通用户查看其他人的运行元数据。"""
+
+        if not 1 <= limit <= 100:
+            raise ValueError("limit 必须位于 1 到 100 之间。")
+        with self._lock:
+            records = [record for record in self._records if record.user_id == user_id]
+        return [asdict(record) for record in records[-limit:]]
+
     def metrics(self) -> dict[str, object]:
         with self._lock:
             records = list(self._records)
