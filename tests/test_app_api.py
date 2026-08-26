@@ -81,6 +81,35 @@ class FormalApplicationApiTests(unittest.TestCase):
         self.assertEqual(invalid.json()["error"]["code"], "validation_error")
         self.assertEqual(invalid.json()["request_id"], invalid.headers["X-Request-ID"])
 
+    def test_jwt_login_and_bearer_auth(self):
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={"user_id": "demo-user", "password": "demo-password"},
+        )
+        self.assertEqual(login.status_code, 200)
+        token = login.json()["access_token"]
+        me = self.client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+        )
+        chat = self.client.post(
+            "/api/v1/chat",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"thread_id": "jwt", "message": "推荐耳机"},
+        )
+        self.assertEqual(me.json()["user_id"], "demo-user")
+        self.assertEqual(chat.status_code, 200)
+
+    def test_jwt_rejects_wrong_password_and_tampering(self):
+        wrong = self.client.post(
+            "/api/v1/auth/login",
+            json={"user_id": "demo-user", "password": "wrong"},
+        )
+        invalid = self.client.get(
+            "/api/v1/orders", headers={"Authorization": "Bearer not-a-jwt"}
+        )
+        self.assertEqual(wrong.status_code, 401)
+        self.assertEqual(invalid.status_code, 401)
+
     def test_cors_allows_configured_frontend_origin(self):
         response = self.client.options(
             "/api/v1/chat",

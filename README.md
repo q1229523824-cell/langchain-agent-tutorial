@@ -34,6 +34,9 @@
 - 新增 `business-service/` Spring Boot 业务服务示例：商品、订单、退款预览/确认、幂等键、乐观锁和 Trace ID；
 - 新增 `database/schema.sql`、`database/seed.sql` 与 `docker-compose.yml`，演示 MySQL、Redis 和 Java 服务的部署边界；
 - Python Agent 只负责编排，Java 业务服务负责鉴权、状态机、事务和确定性写入，避免模型直接操作订单数据。
+- 新增 `web/` React/Vite 前端，支持 JWT 登录、SSE 聊天、商品/订单查看和退款二次确认；
+- Python API 支持 JWT Bearer Token，保留 `X-Demo-Token` 作为旧学习案例兼容入口；
+- 新增 Java REST 客户端和 Agent 工具映射，配置 `BUSINESS_SERVICE_URL` 后可将商品、订单和退款工具转发给 Java 服务。
 
 ## 项目结构
 
@@ -47,6 +50,7 @@ chapter06_ecommerce/    # Day 14 电商工作流、混合检索、API、评测�
 app/                    # 正式后端：API、Schema、服务、Agent与数据访问适配层
 business-service/       # Java Spring Boot商品/订单/退款业务服务（当前为可替换仓库的demo）
 database/               # MySQL建表与演示数据脚本
+web/                    # React/Vite前端：登录、SSE聊天、订单和退款确认
 tests/                  # 不调用 API 的本地工具测试
 ```
 
@@ -130,6 +134,8 @@ CLI 支持以下命令：
 主要后端接口：
 
 ```text
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
 POST /api/v1/chat
 POST /api/v1/chat/stream
 GET  /api/v1/conversations
@@ -171,6 +177,22 @@ Day 4 默认在状态消息达到 30 条时摘要旧历史并保留最近 12 条
 --model-call-limit
 --tool-call-limit
 ```
+
+如果要启用 Java REST 工具，在启动 Python API 前配置：
+
+```powershell
+$env:BUSINESS_SERVICE_URL = "http://127.0.0.1:8081"
+```
+
+前端开发模式：
+
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+默认演示账号为 `demo-user / demo-password`。前端只是作品集演示，生产环境应替换为真正的用户表、密码哈希和 OAuth/OIDC 身份提供商。
 
 ## 技术亮点
 

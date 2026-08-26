@@ -103,6 +103,9 @@ ECOMMERCE_DATA_DIRECTORY   本地运行数据目录
 ECOMMERCE_USE_LLM         是否允许调用DeepSeek，默认false
 ECOMMERCE_RATE_LIMIT      单用户滑动窗口限额，默认30
 ECOMMERCE_CORS_ORIGINS    逗号分隔的前端来源白名单
+ECOMMERCE_JWT_SECRET      JWT签名密钥（生产环境必须外部注入）
+ECOMMERCE_JWT_EXPIRE_MINUTES JWT有效期，默认120分钟
+BUSINESS_SERVICE_URL      Java业务服务地址（启用REST工具时使用）
 ```
 
 `.env`仍不进入Git、RAG、日志或API响应。

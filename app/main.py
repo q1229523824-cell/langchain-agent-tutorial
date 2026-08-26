@@ -38,6 +38,9 @@ def create_app(
             data_directory=data_directory or selected.data_directory,
             use_llm=selected.use_llm if use_llm is None else use_llm,
             rate_limit=selected.rate_limit,
+            jwt_secret=selected.jwt_secret,
+            jwt_expire_minutes=selected.jwt_expire_minutes,
+            business_service_url=selected.business_service_url,
             cors_origins=selected.cors_origins,
         )
 
@@ -62,7 +65,7 @@ def create_app(
         allow_origins=list(selected.cors_origins),
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Demo-Token", "X-Request-ID"],
+        allow_headers=["Content-Type", "Authorization", "X-Demo-Token", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
     # 后添加的中间件位于外层，使CORS预检响应也能获得request_id。

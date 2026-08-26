@@ -32,5 +32,12 @@ services:
       - mysql
       - redis
 
+  web:
+    build: ./web
+    ports:
+      - "5173:80"
+    depends_on:
+      - business-service
+
 volumes:
   mysql-data:

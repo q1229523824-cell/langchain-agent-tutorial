@@ -26,7 +26,7 @@ Invoke-RestMethod http://127.0.0.1:8081/api/orders/order-1001 -Headers $headers
 1. `POST /api/refunds/preview`：校验用户、订单状态和幂等键，只生成 `PREPARED` 记录；
 2. `POST /api/refunds/{refundId}/confirm`：再次校验订单版本后，在事务边界内执行一次确认。
 
-当前 `CommerceService` 用内存 Map 演示并发控制。`database/schema.sql` 已给出 MySQL 表结构，后续可把 Map 替换为 MyBatis-Plus Mapper；Redis 用于分布式幂等键和限流。不要把当前 demo 描述成已经接入 MySQL/Redis。
+当前 `CommerceService` 用内存 Map 演示业务流程；`persistence/` 已提供 MyBatis-Plus Entity/Mapper 和 Redis 幂等存储适配器。启用 `mysql` profile 后可把这些适配器接入真正的 Service 事务；不要把默认 demo 描述成已经连接 MySQL/Redis。
 
 ## Python Agent 如何接入
 

@@ -52,10 +52,11 @@ sequenceDiagram
 - `service/CommerceService`：商品、订单、退款预览和确认；
 - `dto/`：请求参数校验，避免模型传入任意字段；
 - `exception/`：统一错误结构；
+- `persistence/`：MyBatis-Plus Entity/Mapper 与 Redis 幂等存储适配器；
 - `database/`：MySQL 表结构，退款使用 `(user_id, idempotency_key)` 唯一约束；
 - `docker-compose.yml`：启动 MySQL、Redis 和 Java 容器的部署示例。
 
-为了让没有 Java 环境的学习者也能读懂和启动，默认服务使用内存仓库；代码中的 `@Transactional`、订单 `version`、唯一幂等键和 SQL 脚本展示了迁移到 MySQL/Redis 时的边界。当前不能把它描述成已经完成生产级 MySQL/Redis 接入。
+为了让没有 Java 环境的学习者也能读懂和启动，默认服务使用内存仓库；`persistence/` 中的 Mapper 和 Redis 组件在 `mysql` profile 下启用。代码中的 `@Transactional`、订单 `version`、唯一幂等键和 SQL 脚本展示了迁移到 MySQL/Redis 时的边界。当前不能把默认 demo 描述成已经完成生产级数据迁移。
 
 ## Python 工具映射
 
@@ -73,6 +74,16 @@ X-User-Id       服务端认证后注入，不能信任模型生成
 X-Request-ID    Python 与 Java 共用，串联日志和 Trace
 Idempotency-Key 退款业务唯一键，不能只依赖自然语言
 ```
+
+## JWT 认证
+
+Python API 新增：
+
+- `POST /api/v1/auth/login`：演示账号换取短期 JWT；
+- `GET /api/v1/auth/me`：从 Bearer Token 解析当前用户；
+- 业务接口优先使用 `Authorization: Bearer <token>`，旧 `X-Demo-Token` 仅保留给学习测试。
+
+当前登录凭据仍是本地 demo 映射，密码没有进入 Git。生产环境应将用户表和密码哈希放在 Java/MySQL 或企业身份提供商中，Python 只验证签发的 JWT；`ECOMMERCE_JWT_SECRET` 必须通过密钥管理系统注入。
 
 ## 启动顺序
 

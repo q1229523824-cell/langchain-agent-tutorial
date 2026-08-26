@@ -19,6 +19,9 @@ class AppSettings:
     data_directory: Path = PROJECT_ROOT / ".agent_data" / "app"
     use_llm: bool = False
     rate_limit: int = 30
+    jwt_secret: str = "local-dev-only-change-me"
+    jwt_expire_minutes: int = 120
+    business_service_url: str | None = None
     cors_origins: tuple[str, ...] = (
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -41,5 +44,8 @@ class AppSettings:
             use_llm=os.getenv("ECOMMERCE_USE_LLM", "false").lower()
             in {"1", "true", "yes"},
             rate_limit=int(os.getenv("ECOMMERCE_RATE_LIMIT", "30")),
+            jwt_secret=os.getenv("ECOMMERCE_JWT_SECRET", "local-dev-only-change-me"),
+            jwt_expire_minutes=int(os.getenv("ECOMMERCE_JWT_EXPIRE_MINUTES", "120")),
+            business_service_url=os.getenv("BUSINESS_SERVICE_URL") or None,
             cors_origins=origins,
         )
