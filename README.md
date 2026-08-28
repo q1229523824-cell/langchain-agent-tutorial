@@ -158,6 +158,9 @@ GET  /api/v1/refunds/{refund_id}/events
 Python Agent + Java 业务服务的跨语言边界、退款两阶段协议和 MySQL/Redis 运行方式见
 [Python + Java 电商架构说明](docs/python-java-ecommerce-architecture.md)。
 
+现场演示脚本、星河商城架构图和退款时序图见
+[星河商城现场运行 Demo](docs/xinghe-live-demo.md)。
+
 只有明确允许把当前问题、最近六条消息和必要证据发送给 DeepSeek 时才启用：
 
 ```powershell
